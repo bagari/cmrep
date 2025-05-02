@@ -624,8 +624,8 @@ SymmetricClosestPointMatchTerm
     SMLVec3d C = SMLVec3d(poly->GetPoint(c->GetPointId(2)));
 
     vnl_matrix<double> W(3, 2);
-    W.set_column(0, B-A);
-    W.set_column(1, C-A);
+    W.set_column(0, (B-A).as_vector());
+    W.set_column(1, (C-A).as_vector());
     SMLVec3d v = SMLVec3d(xs) - A;
 
     vnl_matrix<double> WtW = W.transpose() * W;
@@ -3749,11 +3749,11 @@ void MedialOptimizationProblem::DumpGradientMesh()
 
   // Save the cm-rep file for this model
   char *fnout = new char[100];
-  sprintf(fnout, "dumpgrad%04lu.cmrep", (unsigned long) this->nGradCalls);
+  snprintf(fnout, 100, "dumpgrad%04lu.cmrep", (unsigned long) this->nGradCalls);
   SubdivisionMedialModelIO::WriteModel(model, fnout);
   
   // Now load the VTK file and append with some gradient fields
-  sprintf(fnout, "dumpgrad%04lu.vtk", (unsigned long) this->nGradCalls);
+  snprintf(fnout, 100, "dumpgrad%04lu.vtk", (unsigned long) this->nGradCalls);
   vtkPolyDataReader *reader = vtkPolyDataReader::New();
   reader->SetFileName(fnout);
   reader->Update();

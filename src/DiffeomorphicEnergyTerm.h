@@ -63,6 +63,9 @@ private:
     // Fij' = a . (Xi' - Xj') + b * R';
     Vec a;
     double b;
+
+
+
   };
 
   // Sparse matrix storage for proximity informatino

@@ -397,9 +397,9 @@ GenerateContour(FloatImage *image)
   // Create a transform into RAS coordinates
   vnl_matrix_fixed<double, 4, 4> vtk2nii =
     ConstructVTKtoNiftiTransform(
-      image->GetInternalImage()->GetInternalImage()->GetDirection().GetVnlMatrix(),
-      image->GetInternalImage()->GetInternalImage()->GetOrigin().GetVnlVector(),
-      image->GetInternalImage()->GetInternalImage()->GetSpacing().GetVnlVector());          
+      image->GetInternalImage()->GetInternalImage()->GetDirection().GetVnlMatrix().as_ref(),
+      image->GetInternalImage()->GetInternalImage()->GetOrigin().GetVnlVector().as_ref(),
+      image->GetInternalImage()->GetInternalImage()->GetSpacing().GetVnlVector().as_ref());
 
   m_Transform = vtkSmartPointer<vtkTransform>::New();
   m_Transform->SetMatrix(vtk2nii.data_block());

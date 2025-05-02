@@ -1,6 +1,5 @@
 #include <iostream>
 #include <string>
-#include <sstream>
 #include <fstream>
 #include <set>
 #include <cstdio>
@@ -1111,7 +1110,7 @@ int cmrep_vskel_main(int argc, char *argv[])
 
     // Compute all the edges
     typedef ImmutableSparseArray<double> ImmutableArr;
-    typedef ImmutableArr::VNLSourceType MutableArr;
+    typedef vnl_sparse_matrix<double> MutableArr;
 
     // Initialize the adjacency matrix
     size_t np = xMesh->GetNumberOfPoints();

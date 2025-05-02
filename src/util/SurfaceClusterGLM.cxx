@@ -24,6 +24,7 @@
 #include "vtkGeometryFilter.h"
 #include "vtkTriangle.h"
 #include "vtkSmartPointer.h"
+#include "vtkCellCenters.h"
 #include "vnl/vnl_file_matrix.h"
 #include "vnl/vnl_vector_fixed.h"
 #include "vnl/vnl_rank.h"
@@ -119,6 +120,11 @@ const char *usage_text =
   "                 to smoothing the data with a Gaussian with standard \n"
   "                 deviation sqrt(2T)*L, where L is the average distance \n"
   "                 between neighboring vertices.\n"
+  "  -D / --diffusion-mm sigma \n"
+  "                 Alternative way of specifyng diffusion. Parameter sigma is the\n"
+  "                 approximate standard deviation of the Gaussian kernel applied to\n"
+  "                 the data on the mesh. The actual diffusion time is estimated from\n"
+  "                 the mean edge length on the mesh.\n"
   "  --delta-t DT\n"
   "                 Specify a different step size for diffusion (default: 0.01).\n"
   "  -e / --edges   \n"
@@ -368,7 +374,7 @@ public:
   Edge(vtkIdType a, vtkIdType b) : std::pair<vtkIdType,vtkIdType>(min(a,b), max(a,b)) {}
 };
 
-void PointDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *array)
+void PointDataDiffusion(vtkDataSet *mesh, double scale, double dt, bool scale_is_mm, const char *array)
 {
   // Diffusion simulates heat equation, dF/dt = -Laplacian(F), for t = time
   // We use the most basic approximation of the laplacian L(F) = [Sum_{j\in N(i)} F(j) - F(i)] / |N(i)|
@@ -376,9 +382,6 @@ void PointDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *ar
   // Create a set of all edges in the mesh
   typedef set<Edge> EdgeSet;
   EdgeSet edges;
-
-  // Report
-  printf("Performing diffusion on point data (t = %f, delta_t = %f)\n", time, dt);
 
   // Source array
   vtkDataArray *f = mesh->GetPointData()->GetArray(array);
@@ -405,6 +408,30 @@ void PointDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *ar
       }
     }
 
+  // Calculate the average length of each edge
+  double sum_l = 0, sum_l2 = 0, n_edges = 0;
+  for(EdgeSet::iterator it = edges.begin(); it!=edges.end(); ++it)
+  {
+    vnl_vector_fixed<double, 3> x0, x1;
+    mesh->GetPoint(it->first, x0.data_block());
+    mesh->GetPoint(it->second, x1.data_block());
+    double len = (x1-x0).magnitude();
+    sum_l += len;
+    sum_l2 += len * len;
+    n_edges++;
+  }
+  double mean_edge_len = sum_l / n_edges;
+  double std_edge_len = sqrt(sum_l2 / n_edges - mean_edge_len * mean_edge_len);
+
+  double time = scale;
+  if(scale_is_mm)
+    time = 0.5 * (scale / mean_edge_len) * (scale / mean_edge_len);
+
+  // Report
+  printf("Performing diffusion on point data (t = %f, delta_t = %f)\n", time, dt);
+  printf("  Average edge length %6.4f ± %6.4f mm\n", mean_edge_len, std_edge_len);
+  printf("  Estimated smoothing kernel σ = %6.4f mm\n", mean_edge_len * sqrt(2 * time));
+
   // Count the number of neighbors of each vertex
   std::vector<int> nbr(mesh->GetNumberOfPoints(), 0);
   for(EdgeSet::iterator it = edges.begin(); it!=edges.end(); ++it)
@@ -424,7 +451,6 @@ void PointDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *ar
       f_upd->SetComponent(i, j, f->GetComponent(i, j));
 
   // Iterate
-  printf("Before diffusion: f[1000,10]=%8.4f\n", f->GetComponent(1000,10));
   unsigned int ncomp = f->GetNumberOfComponents();
   unsigned int jt = 0;
   for(double t = 0; t < time - dt/2; t+=dt)
@@ -475,10 +501,34 @@ void PointDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *ar
     if((++jt) % 100 == 0 || t+dt >= time - 0.5 * dt)
       cout << " t = " << t+dt << endl;
     }
-  printf("After diffusion: f[1000,10]=%8.4f\n", f->GetComponent(1000,10));
 }
 
-void CellDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *array)
+vnl_vector_fixed<double, 3> GetCellCenter(vtkDataSet *mesh, vtkCell *cell)
+{
+  if(cell->GetCellType() == VTK_TETRA)
+  {
+    vnl_vector_fixed<double, 3> x0, x1, x2, x3, center;
+    mesh->GetPoint(cell->GetPointId(0), x0.data_block());
+    mesh->GetPoint(cell->GetPointId(1), x1.data_block());
+    mesh->GetPoint(cell->GetPointId(2), x2.data_block());
+    mesh->GetPoint(cell->GetPointId(3), x3.data_block());
+    vtkTetra::TetraCenter(x0.data_block(), x1.data_block(), x2.data_block(), x3.data_block(), center.data_block());
+    return center;
+  }
+  else if(cell->GetCellType() == VTK_TRIANGLE)
+  {
+    vnl_vector_fixed<double, 3> x0, x1, x2, center;
+    mesh->GetPoint(cell->GetPointId(0), x0.data_block());
+    mesh->GetPoint(cell->GetPointId(1), x1.data_block());
+    mesh->GetPoint(cell->GetPointId(2), x2.data_block());
+    vtkTriangle::TriangleCenter(x0.data_block(), x1.data_block(), x2.data_block(), center.data_block());
+    return center;
+  }
+
+  return vnl_vector_fixed<double, 3>(0.0);
+}
+
+void CellDataDiffusion(vtkDataSet *mesh, double scale, double dt, bool scale_is_mm, const char *array)
 {
   // Diffusion, but between cells. This is really pretty ad hoc now
   
@@ -497,9 +547,6 @@ void CellDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *arr
   // share an edge
   typedef set<Edge> EdgeSet;
   EdgeSet edges;
-
-  // Report
-  printf("Performing diffusion on cell data (t = %f, delta_t = %f)\n", time, dt);
 
   // Get all edges into the edge set
   for(int i = 0; i < mesh->GetNumberOfCells(); i++)
@@ -530,7 +577,29 @@ void CellDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *arr
     else throw MCException("Wrong cell type in CellDataDiffusion");
     }
 
-  printf("There are %d pairs of adjacent cells\n", (int) edges.size());
+    // Calculate the average length of each edge
+    double sum_l = 0, sum_l2 = 0, n_edges = 0;
+    for(EdgeSet::iterator it = edges.begin(); it!=edges.end(); ++it)
+    {
+      vnl_vector_fixed<double, 3> x0 = GetCellCenter(mesh, mesh->GetCell(it->first));
+      vnl_vector_fixed<double, 3> x1 = GetCellCenter(mesh, mesh->GetCell(it->second));
+      double len = (x1-x0).magnitude();
+      sum_l += len;
+      sum_l2 += len * len;
+      n_edges++;
+    }
+    double mean_edge_len = sum_l / n_edges;
+    double std_edge_len = sqrt(sum_l2 / n_edges - mean_edge_len * mean_edge_len);
+
+    double time = scale;
+    if(scale_is_mm)
+      time = 0.5 * (scale * mean_edge_len) * (scale * mean_edge_len);
+
+    // Report
+    printf("Performing diffusion on cell data (t = %f, delta_t = %f)\n", time, dt);
+    printf("  There are %d pairs of adjacent cells\n", (int) edges.size());
+    printf("  Average edge length %6.4f ± %6.4f mm\n", mean_edge_len, std_edge_len);
+    printf("  Estimated smoothing kernel σ = %6.4f mm\n", mean_edge_len * sqrt(2 * time));
 
   // Count the number of neighbors of each cell
   std::vector<int> nbr(mesh->GetNumberOfCells(), 0);
@@ -550,9 +619,6 @@ void CellDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *arr
   for(int i = 0; i < f->GetNumberOfTuples(); i++)
     for(int j = 0; j < f->GetNumberOfComponents(); j++)
       f_upd->SetComponent(i, j, f->GetComponent(i, j));
-
-  // Iterate
-  printf("Before diffusion: f[1000,10]=%8.4f\n", f->GetComponent(1000,10));
 
   unsigned int ncomp = f->GetNumberOfComponents();
   unsigned int jt = 0;
@@ -586,8 +652,6 @@ void CellDataDiffusion(vtkDataSet *mesh, double time, double dt, const char *arr
     if((++jt) % 100 == 0 || t+dt >= time - 0.5 * dt)
       cout << " t = " << t+dt << endl;
     }
-  printf("After diffusion: f[1000,10]=%8.4f\n", f->GetComponent(1000,10));
-
 }
 
 template <class TDataset>
@@ -1583,6 +1647,9 @@ struct Parameters
   // Diffusion amount
   double diffusion, delta_t;
 
+  // Whether diffusion is specified in time units or mm units
+  bool diffusion_in_mm;
+
   // Whether tubes are being used
   bool flag_edges;
 
@@ -1617,7 +1684,7 @@ struct Parameters
 
   Parameters()
     {
-    np = 0; dom = POINT; threshold = 0; diffusion = 0; flag_edges = false; ttype = TSTAT; delta_t = 0.01; 
+    np = 0; dom = POINT; threshold = 0; diffusion = 0; flag_edges = false; ttype = TSTAT; delta_t = 0.01; diffusion_in_mm = false;
     flag_missing_data = false; min_valid_obs = 0.0; flag_write_binary = false; flag_freedman_lane = false; flag_triangulate = false;
     max_threads = 0;
     }
@@ -2017,9 +2084,9 @@ int meshcluster(Parameters &p, bool isPolyData)
     if(p.diffusion > 0)
       {
       if(p.dom == POINT)
-        PointDataDiffusion(mesh[i], p.diffusion, p.delta_t, p.array_name.c_str());
+        PointDataDiffusion(mesh[i], p.diffusion, p.delta_t, p.diffusion_in_mm, p.array_name.c_str());
       else
-        CellDataDiffusion(mesh[i], p.diffusion, p.delta_t, p.array_name.c_str());
+        CellDataDiffusion(mesh[i], p.diffusion, p.delta_t, p.diffusion_in_mm, p.array_name.c_str());
       }
 
     // If missing data is specified, check for number of nans at each vertex, and if the number
@@ -2628,7 +2695,13 @@ int main(int argc, char *argv[])
       else if(arg == "-d" || arg == "--diffusion")
         {
         p.diffusion = atof(argv[++i]);
+        p.diffusion_in_mm = false;
         }
+      else if(arg == "-D" || arg == "--diffusion-mm")
+      {
+        p.diffusion = atof(argv[++i]);
+        p.diffusion_in_mm = true;
+      }
       else if(arg == "--delta-t")
         {
         p.delta_t = atof(argv[++i]);

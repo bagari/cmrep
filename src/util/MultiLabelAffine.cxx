@@ -48,9 +48,7 @@
 #include "vtkQuadricClustering.h"
 #include "vtkUnstructuredGrid.h"
 #include "vtkPolyDataWriter.h"
-#include "vtkUnstructuredGridWriter.h"
 #include "vtkCellArray.h"
-#include "vtkVertex.h"
 #include <vtkMatrix4x4.h>
 #include <vtkPolyDataReader.h>
 #include "vnl/vnl_matrix_fixed.h"
@@ -218,7 +216,7 @@ void GetLabeledBoundaryMesh(LabelImageType *image, set<int> labels,
     // Compute the transform from VTK coordinates to NIFTI/RAS coordinates
     vnl_matrix_fixed<double, 4, 4> vtk2nii =
       ConstructVTKtoNiftiTransform(
-        image->GetDirection().GetVnlMatrix(),
+        image->GetDirection().GetVnlMatrix().as_ref(),
         image->GetOrigin().GetVnlVector(),
         image->GetSpacing().GetVnlVector());
 

@@ -443,9 +443,9 @@ void my_calcf(int &n, double *x, int &nf, double &f, int *dummy1, double *dummy2
   if (iter % iter_freq == 0)
     {
     char buffer[256];
-    sprintf(buffer, "iter_%03d.med.vtk", iter / iter_freq);
+    snprintf(buffer, 256, "iter_%03d.med.vtk", iter / iter_freq);
     ExportMedialMeshToVTK(mop->GetMedialModel(), NULL, buffer);
-    sprintf(buffer, "iter_%03d.bnd.vtk", iter / iter_freq);
+    snprintf(buffer, 256, "iter_%03d.bnd.vtk", iter / iter_freq);
     ExportBoundaryMeshToVTK(mop->GetMedialModel(), NULL, buffer);
     }
   ++iter;
@@ -1069,8 +1069,8 @@ void MedialPDE::MatchImageByMoments(FloatImage *image, unsigned int nCuts)
   // Decompose xCov and yCov into eigenvalues
   vnl_vector<double> Dx(3), Dy(3);
   vnl_matrix<double> Vx(3,3), Vy(3,3);
-  vnl_symmetric_eigensystem_compute<double>(xCov, Vx, Dx);
-  vnl_symmetric_eigensystem_compute<double>(yCov, Vy, Dy);
+  vnl_symmetric_eigensystem_compute<double>(xCov.as_ref(), Vx, Dx);
+  vnl_symmetric_eigensystem_compute<double>(yCov.as_ref(), Vy, Dy);
 
   // Compute the scale factor
   // double s = sqrt(dot_product(Dx,Dy) / dot_product(Dy,Dy));
@@ -2654,7 +2654,7 @@ void MedialPCA::ComputePCA(MedialPDE *mpde)
 
     // Parse over all the boundary sites
     for(MedialAtomIterator it(xGrid); !it.IsAtEnd(); ++it)
-      A[i].set_row(it.GetIndex(), xMedialModel->GetAtomArray()[it.GetIndex()].X);
+      A[i].set_row(it.GetIndex(), xMedialModel->GetAtomArray()[it.GetIndex()].X.as_ref());
 
     // Same for boundary atoms
     Abnd[i].set_size(xMedialModel->GetNumberOfBoundaryPoints(), 3);
@@ -2662,7 +2662,7 @@ void MedialPCA::ComputePCA(MedialPDE *mpde)
     tbnd[i].set_size(3);
 
     for(MedialBoundaryPointIterator bit(xGrid); !bit.IsAtEnd(); ++bit)
-      Abnd[i].set_row(bit.GetIndex(), GetBoundaryPoint(bit, xMedialModel->GetAtomArray()).X);
+      Abnd[i].set_row(bit.GetIndex(), GetBoundaryPoint(bit, xMedialModel->GetAtomArray()).X.as_ref());
     }
 
   // cout << "Testing Procrustes" << endl;
