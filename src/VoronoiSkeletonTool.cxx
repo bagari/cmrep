@@ -280,6 +280,8 @@ int usage()
   cout << "                         the pruned parts of the skeleton excluded. Use with tetfill to generate" << endl;
   cout << "                         a thickness map in image space (different from -I output, this is " << endl;
   cout << "                         distance from the skeleton vertices to the boundary generator points" << endl;
+  cout << "    -C                   Skip the step of converting skeleton cell data to point data. This " << endl;
+  cout << "                         option was added to bypass a segmentation fault" << endl;
   cout << "Other Options: " << endl;
   cout << "    -S image array mode  Sample from image 'image' and store as array 'array'" << endl;
   cout << "                         mode is one of 'mean', 'max'. Must be used together with -T command" << endl;
@@ -320,6 +322,7 @@ int cmrep_vskel_main(int argc, char *argv[])
   bool flagGeodFull = false;
   int subLevel = 0;
   SubMode subMode = LINEAR;
+  bool skipCellDataToPointData = false;
 
   // Sampling stuff
   vector<SamplingStruct> sampling;
@@ -352,6 +355,10 @@ int cmrep_vskel_main(int argc, char *argv[])
       {
       nComp = atoi(argv[++iArg]);
       }
+    else if(arg == "-C")
+    {
+      skipCellDataToPointData = true;
+    }
     else if(arg == "-T")
       {
       fnOutThickness = argv[++iArg];
@@ -796,12 +803,18 @@ int cmrep_vskel_main(int argc, char *argv[])
     polySave = fltWhy->GetOutput();
     }
 
+  WriteVTKData(polySave, "/tmp/whydoyoucrash.vtk");
+
   // Convert the cell data to point data
-  vtkCellDataToPointData *c2p = vtkCellDataToPointData::New();
-  c2p->SetInputData(polySave);
-  c2p->PassCellDataOn();
-  c2p->Update();
-  vtkPolyData *final = c2p->GetPolyDataOutput();
+  vtkPolyData *final = polySave;
+  if(!skipCellDataToPointData)
+  {
+    vtkCellDataToPointData *c2p = vtkCellDataToPointData::New();
+    c2p->SetInputData(polySave);
+    c2p->PassCellDataOn();
+    c2p->Update();
+    vtkPolyData *final = c2p->GetPolyDataOutput();
+  }
 
   // Compute mean, median thickness?
   double int_area = 0, int_thick = 0;
@@ -823,7 +836,7 @@ int cmrep_vskel_main(int argc, char *argv[])
   cout << "Surface area: " << int_area << endl;
   cout << "Mean thickness: " << int_thick / int_area << endl;
     
-  vtkPolyData *skelfinal = c2p->GetPolyDataOutput();
+  vtkPolyData *skelfinal = final;
 
   // Quadric clustering
   if(nBins > 0)
@@ -839,7 +852,7 @@ int cmrep_vskel_main(int argc, char *argv[])
       ceil(fbb.GetLength(0) / binsize), 
       ceil(fbb.GetLength(1) / binsize),
       ceil(fbb.GetLength(2) / binsize));
-    fCluster->SetInputData(c2p->GetPolyDataOutput());
+    fCluster->SetInputData(skelfinal);
     fCluster->SetCopyCellData(1);
     fCluster->Update();
 
@@ -855,11 +868,14 @@ int cmrep_vskel_main(int argc, char *argv[])
       (int) fCluster->GetOutput()->GetNumberOfCells());
 
     // Convert cell data to point data again
-    vtkCellDataToPointData *c2p = vtkCellDataToPointData::New();
-    c2p->SetInputConnection(fCluster->GetOutputPort());
-    c2p->PassCellDataOn();
-    c2p->Update();
-    skelfinal = c2p->GetPolyDataOutput();
+    if(!skipCellDataToPointData)
+      {
+      vtkCellDataToPointData *c2p = vtkCellDataToPointData::New();
+      c2p->SetInputConnection(fCluster->GetOutputPort());
+      c2p->PassCellDataOn();
+      c2p->Update();
+      skelfinal = c2p->GetPolyDataOutput();
+      }
     }
 
   // Write the skeleton out
