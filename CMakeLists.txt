@@ -508,6 +508,8 @@ ADD_EXECUTABLE(meshdiff
 ADD_EXECUTABLE(warpmesh
   src/util/WarpMeshBackwards.cxx)
 
+ADD_EXECUTABLE(vtkmeshvol src/util/MeshVolume.cxx)
+
 # This is a one-off tool for sampling from skeleton tetra meshes
 ADD_EXECUTABLE(skel_tetra_max_thick_sphere
   src/util/SkelTetraMaxThicknessSphere.cxx)
@@ -533,7 +535,7 @@ ADD_EXECUTABLE(ml_affine
 SET(CMREP_UTIL_TOOLS
   sphere_splat vtkprocrustes vtkcontour
   mesh2img mesh_image_sample mesh_tetra_sample mesh_merge_arrays mesh_area_element
-  meshglm meshdiff warpmesh skel_tetra_max_thick_sphere
+  meshglm meshdiff warpmesh vtkmeshvol skel_tetra_max_thick_sphere
   contour2surf apply_remeshing_to_another mesh_convert_format ml_affine)
 
 # Tetrahedron tools
