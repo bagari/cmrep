@@ -12,6 +12,7 @@
 #include <iostream>
 #include <list>
 #include <vector>
+#include <atomic>
 #include <stdexcept>
 
 class AbstractImmutableSparseArray
