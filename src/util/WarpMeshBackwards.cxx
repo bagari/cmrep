@@ -293,8 +293,16 @@ int WarpMesh(WarpMeshParam &parm)
 
       // Interpolate the warp at the point
       // cout << "Evaluate at index " << idx[0] << " " << idx[1] << " " << idx[2] << endl;
-      for(size_t d = 0; d < 3; d++)
-        v_warp[d] = func[d]->EvaluateAtContinuousIndex(idx);
+      if(func[0]->IsInsideBuffer(idx))
+        {
+        for(size_t d = 0; d < 3; d++)
+          v_warp[d] = func[d]->EvaluateAtContinuousIndex(idx);
+        }
+      else
+        {
+        for(size_t d = 0; d < 3; d++)
+          v_warp[d] = 0.0;
+        }
       v_warp[3] = 0.0;
 
       // Compute the displacement in RAS coordinates
